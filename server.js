@@ -99,15 +99,15 @@ app.post('/setplaces', function(req, res) {
 });
 
 function promisifiedGetMediaByLocationId(locationId) {
-	return new Promise(function(resolve, reject) {
-		scraper.getMediaByLocationId(locationId, function(error, response_json) {
-			if (error) {
-				reject(error)
-				return
-			}
-			resolve(response_json)
-		})
-	})
+    return new Promise(function(resolve, reject) {
+        scraper.getMediaByLocationId(locationId, function(error, response_json) {
+            if (error) {
+                reject(error)
+                return
+            }
+            resolve(response_json)
+        })
+    })
 }
 
 
@@ -118,10 +118,10 @@ function promisifiedGetMediaByLocationId(locationId) {
 
 function findNearby(latlong, dist, res) {
 
-	var url = "search?type=place&center=" + latlong + "&distance=" + dist;
-	//"search?type=place&center=37.76,-122.427&distance=1000"
+    var url = "search?type=place&center=" + latlong + "&distance=" + dist;
+    //"search?type=place&center=37.76,-122.427&distance=1000"
 
-	// get nearby places
+    // get nearby places
     graph.get(url, function(err, response) {
         console.log("success, received nearby places!");
         // pass places to instagram scraper
@@ -136,76 +136,66 @@ function findNearby(latlong, dist, res) {
 
         // pass this to get instagram stats
         if (response.data.length > 0) {
-        	getInstagramData(nearbyPlaces, res);
+            getInstagramData(nearbyPlaces, res);
         } else {
-        	res.send("no nearby places - expand radius");
+            res.send("no nearby places - expand radius");
         }
-        
-	})
+
+    })
 }
 
+
+
 function getInstagramData(places, res) {
-	console.log("get instagram data");
+    console.log("get instagram data");
 
     var instagramPlaces = [];
     var promiseArray = [];
 
     for (var n = 0; n < places.length; n++) {
         var thisLocID = parseInt(places[n].id);
-        console.log(typeof thisLocID);
+        //console.log(typeof thisLocID);
         console.log(places[n].name);
 
         var promise = promisifiedGetMediaByLocationId(thisLocID)
-        	.then(function (response_json) {
-        		instagramPlaces.push(response_json)
-        	})
-        	.catch(function(error) {
-        		console.log(error)
-        	})
+            .then(function(response_json) {
+                instagramPlaces.push(response_json)
+            })
+            .catch(function(error) {
+                console.log(error)
+            })
         promiseArray.push(promise);
     }
 
-    Promise.all(promiseArray).then(function () {
+    Promise.all(promiseArray).then(function() {
 
-    	// for each place, 
-    	// sort places but media count
-    	instagramPlaces.sort(function(a, b) {
-        // sort by document then sentence sequence
-           return b.media.count - a.media.count;
+        // for each place, 
+        // sort places but media count
+        instagramPlaces.sort(function(a, b) {
+            // sort by document then sentence sequence
+            return b.media.count - a.media.count;
         })
-    	res.send(instagramPlaces);
+        res.send(instagramPlaces);
     })
 }
 
 
 
+// if i want to do distances...
+function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+    var R = 6371; // Radius of the earth in km
+    var dLat = deg2rad(lat2 - lat1); // deg2rad below
+    var dLon = deg2rad(lon2 - lon1);
+    var a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    var d = R * c; // Distance in km
+    var meters = d/1000;
+    return meters;
+}
 
-
-/*var params = {
-	type: 'place',
-	center: 37.76,-122.427,
-	distance: 1000
-}*/
-
-//https://graph.facebook.com/search?type=place&center=37.76,-122.427&distance=1000
-
-// get instagram content and counts based on facebook location id
-app.get('/scrape', function(req, res) {
-    scraper.getMediaByLocationId(337944410, function(error, response_json) {
-        if (error) {
-            console.log("error!");
-            res.send(error);
-        } else {
-
-            res.send(response_json);
-        }
-    });
-})
-
-
-
-
-app.get('/', function(req, res) {
-    console.log('redirected');
-
-});
+function deg2rad(deg) {
+    return deg * (Math.PI / 180)
+}
