@@ -83,13 +83,18 @@ app.get('/auth', function(req, res) {
 
 // ----------- ROUTES ----------------- //
 
+app.get('/', function(req, res) {
+    res.render("directions.ejs");
+})
+
 app.post('/setplaces', function(req, res) {
+    console.log(req.body);
 
     var start = req.body.startlocation;
     var end = req.body.endlocation;
     var dist = req.body.distance;
 
-    console.log(req.body);
+    //console.log(req.body);
 
     // pass locations to google api to get initial route
     // pass locations to instagram scrape
@@ -98,19 +103,6 @@ app.post('/setplaces', function(req, res) {
     //res.send("You submitted: " + textvalue);
 });
 
-function promisifiedGetMediaByLocationId(locationId) {
-    return new Promise(function(resolve, reject) {
-        scraper.getMediaByLocationId(locationId, function(error, response_json) {
-            if (error) {
-                reject(error)
-                return
-            }
-            resolve(response_json)
-        })
-    })
-}
-
-
 
 
 // currently using a hardcoded location but this should be user based
@@ -118,13 +110,15 @@ function promisifiedGetMediaByLocationId(locationId) {
 
 function findNearby(latlong, dist, res) {
 
-    var url = "search?type=place&center=" + latlong + "&distance=" + dist;
+    var url = "search?type=place&center=" + latlong + "&distance=" + dist + "&fields=name,id,location,category_list";
     //"search?type=place&center=37.76,-122.427&distance=1000"
+
+    //40.7261463,-74.0034082 - joe and the juice
 
     // get nearby places
     graph.get(url, function(err, response) {
         console.log("success, received nearby places!");
-        // pass places to instagram scraper
+        // pass places to instagram scrape
 
         // .data is just the place data for the first 25 places
         var nearbyPlaces = response.data;
@@ -132,6 +126,7 @@ function findNearby(latlong, dist, res) {
 
         // but we need to deal with pagination
         // .paging.next will provide the URL for the next 25 results
+        // because we should also exclude 'neighborhoods' maybe - and just restrict to specific locations
         // but for now, just use the first 25...
 
         // pass this to get instagram stats
@@ -146,6 +141,7 @@ function findNearby(latlong, dist, res) {
 
 
 
+
 function getInstagramData(places, res) {
     console.log("get instagram data");
 
@@ -154,30 +150,70 @@ function getInstagramData(places, res) {
 
     for (var n = 0; n < places.length; n++) {
         var thisLocID = parseInt(places[n].id);
-        //console.log(typeof thisLocID);
-        console.log(places[n].name);
+        // some how i'll also want to save the category list from the facebook data
+        var thisCategoryList = places[n].category_list;
+        //console.log(places[n]);
 
-        var promise = promisifiedGetMediaByLocationId(thisLocID)
-            .then(function(response_json) {
-                instagramPlaces.push(response_json)
-            })
-            .catch(function(error) {
-                console.log(error)
-            })
-        promiseArray.push(promise);
+        // only look up places that are not cities or neighborhoods
+        if ((places[n].category_list[0].name != 'City') && (places[n].category_list[0].name != 'Neighborhood')) {
+
+            console.log("look up " + places[n].name);
+
+            var promise = promisifiedGetMediaByLocationId(thisLocID)
+                .then(function(response_json) {
+                    instagramPlaces.push(response_json)
+                })
+                .catch(function(error) {
+                    console.log("error");
+                    console.log(error)
+                })
+            promiseArray.push(promise);
+        } else {
+            console.log("ignore " + places[n].name + ", " + thisCategoryList[0].name);
+        }
     }
 
     Promise.all(promiseArray).then(function() {
-
+        console.log("all instagram stats are returned");
         // for each place, 
         // sort places but media count
-        instagramPlaces.sort(function(a, b) {
+        var mostSited = instagramPlaces.sort(function(a, b) {
             // sort by document then sentence sequence
             return b.media.count - a.media.count;
         })
-        res.send(instagramPlaces);
+
+        var mostLiked = instagramPlaces.sort(function(a, b) {
+            // sort by document then sentence sequence
+            return b.top_posts.nodes[0].likes.count - a.top_posts.nodes[0].likes.count;
+        })
+        mapInstaPlaces(mostSited, mostLiked, res);
+        //res.send(instagramPlaces);
     })
 }
+
+function promisifiedGetMediaByLocationId(locationId) {
+    return new Promise(function(resolve, reject) {
+        scraper.getMediaByLocationId(locationId, function(error, response_json) {
+            if (error) {
+                reject(error)
+                console.log(error);
+                return
+            }
+            resolve(response_json)
+        })
+    })
+}
+
+
+
+// put lat long places on the map
+function mapInstaPlaces(frequent, liked, res) {
+    console.log("map places!");//
+
+    res.send(frequent);
+}
+
+
 
 
 
@@ -192,7 +228,7 @@ function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
         Math.sin(dLon / 2) * Math.sin(dLon / 2);
     var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     var d = R * c; // Distance in km
-    var meters = d/1000;
+    var meters = d / 1000;
     return meters;
 }
 
