@@ -6,12 +6,18 @@
     <title>Hit all the spots</title>
     <!-- <link rel='stylesheet' href='style.css' type='text/css'> -->
     <link href="https://fonts.googleapis.com/css?family=Roboto:400,700" rel="stylesheet">
+    <!-- LIBRARIES! -->
     <script src="http://code.jquery.com/jquery-3.2.1.js"></script>
     <script src="https://d3js.org/d3.v4.min.js"></script>
+    <script src='https://api.tiles.mapbox.com/mapbox-gl-js/v0.41.0/mapbox-gl.js'></script>
+    <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v0.41.0/mapbox-gl.css' rel='stylesheet' />
     <script type="text/javascript">
     $(document).ready(function() {
         console.log("document is ready");
 
+        // move map to new center point
+
+        // get nearby places
         $("#placesForm").submit(function(e) {
             e.preventDefault();
             $.ajax({
@@ -21,6 +27,28 @@
                 dataType: 'json',
                 success: function(data) {
                     console.log(data);
+                    //$('body').html(data);
+                    //displayPlaces(data);
+                    map.addSource('nearbypoints', { type: 'geojson', data: data });
+
+                    map.addLayer({
+                        "id": "nearby",
+                        "type": "circle",
+                        "source": "nearbypoints",
+                        "paint": {
+                            "circle-radius": {
+                                property: 'count',
+                                type: 'exponential',
+                                stops: [
+                                    [1, 5],
+                                    [110000, 20]
+                                ]
+                            },
+                            "circle-color": "#ff2244",
+                            "circle-opacity": 0.6
+                        }
+                    });
+
                 },
                 error: function() {
                     alert("error");
@@ -29,23 +57,6 @@
 
         })
     });
-
-/*    function submitPlaces() {
-        console.log("make ajax request");
-
-        $.ajax({
-            url: "localhost:3000/setplaces",
-            type: 'POST',
-            //data: ,
-            dataType: 'json',
-            success: function(data) {
-                console.log(data);
-            },
-            error: function() {
-                alert("error");
-            }
-        });
-    }*/
     </script>
 </head>
 
@@ -56,19 +67,17 @@
         <input type="text" name="distance" placeholder="max 5000" />
         <input type="submit" name="submitbutton" value="Submit" />
     </form>
-    <div id="map">
+    <div id="map" style='width: 800px; height: 800px;'>
         <script type="text/javascript">
-        //console.log(places);
-        /*mapboxgl.accessToken = 'undefined';
+        mapboxgl.accessToken = 'pk.eyJ1Ijoic3RlcGhrb2x0dW4iLCJhIjoiY2o5cmVidXlkMmFmdTJxbnRxMjJrZnRjYyJ9.DG7R1V9RYEtCBoXVb9AiFQ';
+
         var map = new mapboxgl.Map({
             container: 'map',
-            style: 'mapbox://styles/mapbox/streets-v9',
-            center: [], // make it the start point of the map
-            zoom: 12 // how close
-        });*/
-
-        //new Map = 
-        //https://www.mapbox.com/mapbox-gl-js/api/
+            style: 'mapbox://styles/mapbox/streets-v9?optimize=true',
+            center: [-73.9958957, 40.7294285],
+            // make it the start point of the map - needs to be long-lat (not lat-long)
+            zoom: 14 // how close
+        });
         </script>
     </div>
 </body>

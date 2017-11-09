@@ -21,6 +21,8 @@ var scraper = require('insta-scraper');
 var graph = require('fbgraph');
 // http request module 
 var request = require('request');
+// geojson validate
+var GJV = require("geojson-validation");
 
 // server static files as well as routes
 app.use(express.static('public'));
@@ -114,6 +116,7 @@ function findNearby(latlong, dist, res) {
     //"search?type=place&center=37.76,-122.427&distance=1000"
 
     //40.7261463,-74.0034082 - joe and the juice
+    var origPlace = latlong;
 
     // get nearby places
     graph.get(url, function(err, response) {
@@ -131,7 +134,7 @@ function findNearby(latlong, dist, res) {
 
         // pass this to get instagram stats
         if (response.data.length > 0) {
-            getInstagramData(nearbyPlaces, res);
+            getInstagramData(nearbyPlaces, origPlace, res);
         } else {
             res.send("no nearby places - expand radius");
         }
@@ -139,57 +142,6 @@ function findNearby(latlong, dist, res) {
     })
 }
 
-
-
-
-function getInstagramData(places, res) {
-    console.log("get instagram data");
-
-    var instagramPlaces = [];
-    var promiseArray = [];
-
-    for (var n = 0; n < places.length; n++) {
-        var thisLocID = parseInt(places[n].id);
-        // some how i'll also want to save the category list from the facebook data
-        var thisCategoryList = places[n].category_list;
-        //console.log(places[n]);
-
-        // only look up places that are not cities or neighborhoods
-        if ((places[n].category_list[0].name != 'City') && (places[n].category_list[0].name != 'Neighborhood')) {
-
-            console.log("look up " + places[n].name);
-
-            var promise = promisifiedGetMediaByLocationId(thisLocID)
-                .then(function(response_json) {
-                    instagramPlaces.push(response_json)
-                })
-                .catch(function(error) {
-                    console.log("error");
-                    console.log(error)
-                })
-            promiseArray.push(promise);
-        } else {
-            console.log("ignore " + places[n].name + ", " + thisCategoryList[0].name);
-        }
-    }
-
-    Promise.all(promiseArray).then(function() {
-        console.log("all instagram stats are returned");
-        // for each place, 
-        // sort places but media count
-        var mostSited = instagramPlaces.sort(function(a, b) {
-            // sort by document then sentence sequence
-            return b.media.count - a.media.count;
-        })
-
-        var mostLiked = instagramPlaces.sort(function(a, b) {
-            // sort by document then sentence sequence
-            return b.top_posts.nodes[0].likes.count - a.top_posts.nodes[0].likes.count;
-        })
-        mapInstaPlaces(mostSited, mostLiked, res);
-        //res.send(instagramPlaces);
-    })
-}
 
 function promisifiedGetMediaByLocationId(locationId) {
     return new Promise(function(resolve, reject) {
@@ -205,17 +157,126 @@ function promisifiedGetMediaByLocationId(locationId) {
 }
 
 
+function getInstagramData(fbplaces, center, res) {
+    console.log("get instagram data");
 
-// put lat long places on the map
-function mapInstaPlaces(frequent, liked, res) {
-    console.log("map places!");//
+    var instagramPlaces = [];
+    var promiseArray = [];
 
-    res.send(frequent);
+    for (var n = 0; n < fbplaces.length; n++) {
+        var thisLocID = parseInt(fbplaces[n].id);
+        // some how i'll also want to save the category list from the facebook data
+        var thisCategoryList = fbplaces[n].category_list;
+
+        // only look up places that are not cities or neighborhoods
+        if ((thisCategoryList[0].name != 'City') && (thisCategoryList[0].name != 'Neighborhood')) {
+
+            console.log("look up " + fbplaces[n].name);
+
+            var promise = promisifiedGetMediaByLocationId(thisLocID)
+                .then(function(response_json) {
+                    instagramPlaces.push(response_json)
+                })
+                .catch(function(error) {
+                    console.log("error");
+                    console.log(error)
+                })
+            promiseArray.push(promise);
+        } else {
+            console.log("ignore " + fbplaces[n].name + ", " + thisCategoryList[0].name);
+        }
+    }
+
+    // once each place has been instagram scrapped... 
+    Promise.all(promiseArray).then(function() {
+        console.log("all instagram stats are returned");
+
+        // construct geo object for each places
+        constructGeoDataSet(fbplaces, instagramPlaces, center, res);
+
+        //res.send(instagramPlaces);
+    })
+}
+
+
+function constructGeoDataSet(fbplaces, instaplaces, center, res) {
+    console.log("construct geoJSON");
+
+    var dataCollection = {
+        "type": "FeatureCollection",
+        "features": []
+    }
+
+    var convertOrig = center.split(",");
+
+    var origPlace =  {
+        lat: convertOrig[0],
+        lng: convertOrig[1]
+    }
+
+    var allFeatures = dataCollection.features;
+
+    for (var i = 0; i < instaplaces.length; i++) {
+        var thisinstaplace = instaplaces[i];
+        var thisname = thisinstaplace.name;
+        //console.log(thisname);
+
+        function findPlace(thisplace) {
+            return thisplace.name === thisname;
+        }
+        // find the corresponding fbplace
+        var matchingFB = fbplaces.find(findPlace);
+
+        var dist = getDistanceFromLatLonInKm(origPlace.lat, origPlace.lng, thisinstaplace.lat,thisinstaplace.lng)
+
+
+        var geoFeature = {
+            "id": thisinstaplace.id,
+            "type": "Feature",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [thisinstaplace.lng, thisinstaplace.lat] //long-lat
+            },
+            "properties": {
+                "name": thisname,
+                "category": matchingFB.category_list,
+                "count": thisinstaplace.media.count, // number of instagrams
+                "most-likes": thisinstaplace.top_posts.nodes[0].likes, // the photo at place with most likes
+                "dist": dist
+            }
+        };
+
+        //console.log(geoFeature);
+        allFeatures.push(geoFeature);
+
+        //constructFeature(instaplaces[i], matchingFB);
+        //var geoObjPromise = constructGeoJSON(instaplace[i], fbplaces);
+    }
+    console.log("done featuring");
+    var valid = (GJV.valid(dataCollection));
+    if (valid) {
+        res.send(dataCollection);
+    } else {
+        console.log("errors in geojson!");
+    }
+    
 }
 
 
 
 
+function promisifiedGetMediaByLocationId(locationId) {
+    return new Promise(function(resolve, reject) {
+        scraper.getMediaByLocationId(locationId, function(error, response_json) {
+            if (error) {
+                reject(error)
+                console.log(error);
+                return
+            }
+            resolve(response_json)
+        })
+    })
+}
 
 // if i want to do distances...
 function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
@@ -228,8 +289,7 @@ function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
         Math.sin(dLon / 2) * Math.sin(dLon / 2);
     var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     var d = R * c; // Distance in km
-    var meters = d / 1000;
-    return meters;
+    return d;
 }
 
 function deg2rad(deg) {
