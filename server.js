@@ -23,6 +23,11 @@ var graph = require('fbgraph');
 var request = require('request');
 // geojson validate
 var GJV = require("geojson-validation");
+// google maps API wrapper for just directions
+// doesn't require API key
+var direction = require('google-maps-direction');
+// mapbox
+var MapboxClient = require('mapbox/lib/services/directions');
 
 // server static files as well as routes
 app.use(express.static('public'));
@@ -36,52 +41,7 @@ app.listen(port, function() {
 });
 
 
-// ----------- AUTHORIZE ----------------- //
 
-// get authorization url 
-var authUrl = graph.getOauthUrl({
-    "client_id": conf.client_id,
-    "redirect_uri": conf.redirect_uri
-});
-
-
-app.get('/auth', function(req, res) {
-
-    // we don't have a code yet 
-    // so we'll redirect to the oauth dialog 
-    if (!req.query.code) {
-        console.log("Performing oauth for some user right now.");
-
-        var authUrl = graph.getOauthUrl({
-            "client_id": conf.client_id,
-            "redirect_uri": conf.redirect_uri,
-            "scope": conf.scope
-        });
-
-        if (!req.query.error) { //checks whether a user denied the app facebook login/permissions 
-            res.redirect(authUrl);
-        } else { //req.query.error == 'access_denied' 
-            res.send('access denied');
-        }
-    }
-    // If this branch executes user is already being redirected back with code (whatever that is) 
-    else {
-        console.log("Oauth successful, the code (whatever it is) is: ", req.query.code);
-        // code is set 
-        // we'll send that and get the access token 
-        graph.authorize({
-            "client_id": conf.client_id,
-            "redirect_uri": conf.redirect_uri,
-            "client_secret": conf.client_secret,
-            "code": req.query.code
-        }, function(err, facebookRes) {
-            console.log(facebookRes);
-            conf.access = facebookRes.access_token;
-            res.send("done!");
-            //res.redirect('/UserHasLoggedIn');
-        });
-    }
-});
 
 // ----------- ROUTES ----------------- //
 
@@ -96,13 +56,67 @@ app.post('/setplaces', function(req, res) {
     var end = req.body.endlocation;
     var dist = req.body.distance;
 
-    //console.log(req.body);
-
     // pass locations to google api to get initial route
-    // pass locations to instagram scrape
-    findNearby(start, dist, res);
+    // https://developers.google.com/maps/documentation/directions/intro#RequestParameters
+    /*var originalDirections = direction({
+        origin: start,
+        destination: end,
+        mode: "walking",
+        alternatives: false
+    }).then(function(result) {
+        console.log("got directions for original points");
+        res.send(result);
+    })*/
 
-    //res.send("You submitted: " + textvalue);
+    // get directions using mapbox api
+    // https://github.com/mapbox/mapbox-sdk-js/blob/master/API.md
+    var mapboxClient = new MapboxClient(conf.mapaccess);
+
+    var startArray = start.split(',');
+    var endArray = end.split(',');
+
+    var wayPoints = {
+        start: {
+            lat: parseFloat(startArray[0]),
+            long: parseFloat(startArray[1])
+        },
+        end: {
+            lat: parseFloat(endArray[0]),
+            long: parseFloat(endArray[1])
+        }
+    };
+
+    //40.7293478,-73.9934806
+    //40.7195954,-73.9986804
+
+    // directions API can return promises
+    // argument = way points as lat and longs
+    mapboxClient.getDirections(
+        [{
+            latitude: wayPoints.start.lat,
+            longitude: wayPoints.start.long
+        },
+        {
+            latitude: wayPoints.end.lat,
+            longitude: wayPoints.end.long
+        }],
+        {
+            geometries: 'geojson',
+            profile: 'walking',
+            alternatives: false,
+        })
+        .then(function (response_json) {
+            // do something
+            res.send(response_json.entity);
+        })
+        .catch(function(err) {
+            // handle errors
+            console.log(err);
+        });
+
+
+    // pass locations to instagram scrape
+    //findNearby(start, dist, res);
 });
 
 
@@ -295,3 +309,52 @@ function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
 function deg2rad(deg) {
     return deg * (Math.PI / 180)
 }
+
+
+
+// ----------- AUTHORIZE FACEBOOK GRAPH API ----------------- //
+
+// get authorization url 
+var authUrl = graph.getOauthUrl({
+    "client_id": conf.client_id,
+    "redirect_uri": conf.redirect_uri
+});
+
+
+app.get('/auth', function(req, res) {
+
+    // we don't have a code yet 
+    // so we'll redirect to the oauth dialog 
+    if (!req.query.code) {
+        console.log("Performing oauth for some user right now.");
+
+        var authUrl = graph.getOauthUrl({
+            "client_id": conf.client_id,
+            "redirect_uri": conf.redirect_uri,
+            "scope": conf.scope
+        });
+
+        if (!req.query.error) { //checks whether a user denied the app facebook login/permissions 
+            res.redirect(authUrl);
+        } else { //req.query.error == 'access_denied' 
+            res.send('access denied');
+        }
+    }
+    // If this branch executes user is already being redirected back with code (whatever that is) 
+    else {
+        console.log("Oauth successful, the code (whatever it is) is: ", req.query.code);
+        // code is set 
+        // we'll send that and get the access token 
+        graph.authorize({
+            "client_id": conf.client_id,
+            "redirect_uri": conf.redirect_uri,
+            "client_secret": conf.client_secret,
+            "code": req.query.code
+        }, function(err, facebookRes) {
+            console.log(facebookRes);
+            conf.access = facebookRes.access_token;
+            res.send("done!");
+            //res.redirect('/UserHasLoggedIn');
+        });
+    }
+});
