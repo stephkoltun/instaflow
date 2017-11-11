@@ -23,17 +23,18 @@ var graph = require('fbgraph');
 var request = require('request');
 // geojson validate
 var GJV = require("geojson-validation");
-// google maps API wrapper for just directions
-// doesn't require API key
-var direction = require('google-maps-direction');
-// mapbox
+// get directions using mapbox api
 var MapboxClient = require('mapbox/lib/services/directions');
+
+
 
 // server static files as well as routes
 app.use(express.static('public'));
 app.set('view engine', 'ejs');
 
 graph.setAccessToken(conf.access);
+// https://github.com/mapbox/mapbox-sdk-js/blob/master/API.md
+var mapboxClient = new MapboxClient(conf.mapaccess);
 
 // open the port
 app.listen(port, function() {
@@ -49,237 +50,328 @@ app.get('/', function(req, res) {
     res.render("directions.ejs");
 })
 
-app.post('/setplaces', function(req, res) {
+app.post('/getplaces', function(req, res) {
+    console.log("----- received destination");
     console.log(req.body);
 
     var start = req.body.startlocation;
     var end = req.body.endlocation;
-    var dist = req.body.distance;
+    var dist = parseFloat(req.body.distance);
 
-    // pass locations to google api to get initial route
-    // https://developers.google.com/maps/documentation/directions/intro#RequestParameters
-    /*var originalDirections = direction({
-        origin: start,
-        destination: end,
-        mode: "walking",
-        alternatives: false
-    }).then(function(result) {
-        console.log("got directions for original points");
-        res.send(result);
-    })*/
+    // parse the incoming string
+    // TODO accept any sort of place
+    // likely need ANOTHER API - ugh too much
+    var startObj = latLongObj(start);
+    var endObj = latLongObj(end);
+    var places = [startObj, endObj];
 
-    // get directions using mapbox api
-    // https://github.com/mapbox/mapbox-sdk-js/blob/master/API.md
-    var mapboxClient = new MapboxClient(conf.mapaccess);
+    var allPromises = [];
+    var origRoute;
 
-    var startArray = start.split(',');
-    var endArray = end.split(',');
-
-    var wayPoints = {
-        start: {
-            lat: parseFloat(startArray[0]),
-            long: parseFloat(startArray[1])
-        },
-        end: {
-            lat: parseFloat(endArray[0]),
-            long: parseFloat(endArray[1])
-        }
-    };
-
-    //40.7293478,-73.9934806
-    //40.7195954,-73.9986804
-
-    // directions API can return promises
-    // argument = way points as lat and longs
-    mapboxClient.getDirections(
-        [{
-            latitude: wayPoints.start.lat,
-            longitude: wayPoints.start.long
-        },
-        {
-            latitude: wayPoints.end.lat,
-            longitude: wayPoints.end.long
-        }],
-        {
-            geometries: 'geojson',
-            profile: 'walking',
-            alternatives: false,
+    var routePromise = getRoute(places)
+        .then(function(response_route) {
+            console.log("success - route receieved");
+            console.log(response_route);
+            origRoute = response_route;
         })
-        .then(function (response_json) {
-            // do something
-            res.send(response_json.entity);
+        .catch(function(error) {
+            console.log("error");
+            console.log(error)
         })
-        .catch(function(err) {
-            // handle errors
-            console.log(err);
-        });
+    allPromises.push(routePromise);
 
+    var startData = {
+        coords: startObj,
+        string: start,
+        nearby: null,
+    }
+    var startPromise = findNearby(start, dist)
+        .then(function(response_nearby) {
+            var nearbyFBPlaces = response_nearby;
+            startData.nearby = nearbyFBPlaces;
+            //get instagram stats for this place
+        })
+        .catch(function(error) {
+            console.log("error on finding nearby " + start);
+            console.log(error)
+        })
+    allPromises.push(startPromise);
 
-    // pass locations to instagram scrape
-    //findNearby(start, dist, res);
+    var endData = {
+        coords: endObj,
+        string: end,
+        nearby: null,
+    }
+    var endPromise = findNearby(end, dist)
+        .then(function(response_nearby) {
+            var nearbyFBPlaces = response_nearby;
+            endData.nearby = nearbyFBPlaces;
+        })
+        .catch(function(error) {
+            console.log("error on finding nearby " + end);
+            console.log(error)
+        })
+    allPromises.push(endPromise);
+
+    Promise.all(allPromises).then(function() {
+        console.log("all nearby places are returned for both places");
+        getMedia(startData, endData, origRoute, res);
+    })
+
 });
 
 
+function getMedia(startData, endData, origroute, res) {
+    var allPromises = [];
 
-// currently using a hardcoded location but this should be user based
-//app.get('/nearby', function(req, res) {
+    var startMedia = getInstagramData(startData.nearby, startData.string)
+        .then(function(response_instamedia) {
+            startData.instaplaces = response_instamedia;
+        });
+    allPromises.push(startMedia);
 
-function findNearby(latlong, dist, res) {
+    //get instagram stats for this place
+    var endMedia = getInstagramData(endData.nearby, endData.string)
+        .then(function(response_instamedia) {
+            endData.instaplaces = response_instamedia;
+        });
+    allPromises.push(endMedia);
 
-    var url = "search?type=place&center=" + latlong + "&distance=" + dist + "&fields=name,id,location,category_list";
-    //"search?type=place&center=37.76,-122.427&distance=1000"
+    Promise.all(allPromises).then(function() {
+        console.log("all required data has been gathered");
 
-    //40.7261463,-74.0034082 - joe and the juice
-    var origPlace = latlong;
+        var startStats = keyStats(startData.instaplaces, startData.string);
+        startData.stats = startStats;
+        var endStats = keyStats(endData.instaplaces, endData.string);
+        endData.stats = endStats;
 
-    // get nearby places
-    graph.get(url, function(err, response) {
-        console.log("success, received nearby places!");
-        // pass places to instagram scrape
+        var newpoints = newWaypoints(startData, endData);
 
-        // .data is just the place data for the first 25 places
-        var nearbyPlaces = response.data;
-        //console.log(nearbyPlaces);
+        getRoute(newpoints).then(function(newroute) {
+            //do something with the new route
+            console.log("received new route");
+            var newdests = [startData.stats.mostPopular,startData.stats.leastPopular,startData.stats.mostLiked,endData.stats.mostPopular,endData.stats.leastPopular,endData.stats.mostLiked];
 
-        // but we need to deal with pagination
-        // .paging.next will provide the URL for the next 25 results
-        // because we should also exclude 'neighborhoods' maybe - and just restrict to specific locations
-        // but for now, just use the first 25...
-
-        // pass this to get instagram stats
-        if (response.data.length > 0) {
-            getInstagramData(nearbyPlaces, origPlace, res);
-        } else {
-            res.send("no nearby places - expand radius");
-        }
-
-    })
-}
-
-
-function promisifiedGetMediaByLocationId(locationId) {
-    return new Promise(function(resolve, reject) {
-        scraper.getMediaByLocationId(locationId, function(error, response_json) {
-            if (error) {
-                reject(error)
-                console.log(error);
-                return
-            }
-            resolve(response_json)
+            constructGeoDataSet(startData, endData, origroute, newroute, newdests, res);
         })
     })
 }
 
 
-function getInstagramData(fbplaces, center, res) {
-    console.log("get instagram data");
 
-    var instagramPlaces = [];
-    var promiseArray = [];
+function constructGeoDataSet(start, end, origroute, newroute, newdests, res) {
+    console.log("----- construct geoJSON");   
 
-    for (var n = 0; n < fbplaces.length; n++) {
-        var thisLocID = parseInt(fbplaces[n].id);
-        // some how i'll also want to save the category list from the facebook data
-        var thisCategoryList = fbplaces[n].category_list;
-
-        // only look up places that are not cities or neighborhoods
-        if ((thisCategoryList[0].name != 'City') && (thisCategoryList[0].name != 'Neighborhood')) {
-
-            console.log("look up " + fbplaces[n].name);
-
-            var promise = promisifiedGetMediaByLocationId(thisLocID)
-                .then(function(response_json) {
-                    instagramPlaces.push(response_json)
-                })
-                .catch(function(error) {
-                    console.log("error");
-                    console.log(error)
-                })
-            promiseArray.push(promise);
-        } else {
-            console.log("ignore " + fbplaces[n].name + ", " + thisCategoryList[0].name);
-        }
-    }
-
-    // once each place has been instagram scrapped... 
-    Promise.all(promiseArray).then(function() {
-        console.log("all instagram stats are returned");
-
-        // construct geo object for each places
-        constructGeoDataSet(fbplaces, instagramPlaces, center, res);
-
-        //res.send(instagramPlaces);
-    })
-}
-
-
-function constructGeoDataSet(fbplaces, instaplaces, center, res) {
-    console.log("construct geoJSON");
-
-    var dataCollection = {
+    var waypoints = {
         "type": "FeatureCollection",
         "features": []
     }
 
-    var convertOrig = center.split(",");
-
-    var origPlace =  {
-        lat: convertOrig[0],
-        lng: convertOrig[1]
+    for (var i = 0; i < newdests.length; i++) {
+        var thispoint = newdests[i];
+        var feature = constructFeature(thispoint);
+        waypoints.features.push(feature);
     }
 
-    var allFeatures = dataCollection.features;
 
-    for (var i = 0; i < instaplaces.length; i++) {
-        var thisinstaplace = instaplaces[i];
-        var thisname = thisinstaplace.name;
-        //console.log(thisname);
-
-        function findPlace(thisplace) {
-            return thisplace.name === thisname;
-        }
-        // find the corresponding fbplace
-        var matchingFB = fbplaces.find(findPlace);
-
-        var dist = getDistanceFromLatLonInKm(origPlace.lat, origPlace.lng, thisinstaplace.lat,thisinstaplace.lng)
-
-
-        var geoFeature = {
-            "id": thisinstaplace.id,
-            "type": "Feature",
-            "geometry": {
-                "type": "Point",
-                "coordinates": [thisinstaplace.lng, thisinstaplace.lat] //long-lat
-            },
-            "properties": {
-                "name": thisname,
-                "category": matchingFB.category_list,
-                "count": thisinstaplace.media.count, // number of instagrams
-                "most-likes": thisinstaplace.top_posts.nodes[0].likes, // the photo at place with most likes
-                "dist": dist
-            }
-        };
-
-        //console.log(geoFeature);
-        allFeatures.push(geoFeature);
-
-        //constructFeature(instaplaces[i], matchingFB);
-        //var geoObjPromise = constructGeoJSON(instaplace[i], fbplaces);
+    var dataToSend = {
+        newroute: newroute,
+        origroute: origroute,
+        startPlaces: null,
+        endPlaces: null,
+        waypoints: waypoints,
+        start: start.coords,
+        end: end.coords
     }
-    console.log("done featuring");
-    var valid = (GJV.valid(dataCollection));
-    if (valid) {
-        res.send(dataCollection);
-    } else {
-        console.log("errors in geojson!");
-    }
-    
+
+    console.log("send data");
+    res.send(dataToSend);
+
+
+    //     console.log("done featuring");
+    //     var valid = (GJV.valid(dataCollection));
+    //     if (valid) {
+    //         res.send(dataCollection);
+    //     } else {
+    //         console.log("errors in geojson!");
+    //     }
+
 }
 
 
+function constructFeature(place) {
+    /*function findPlace(thisplace) {
+        return thisplace.name === thisname;
+    }
+    // find the corresponding fbplace
+    var matchingFB = fbplaces.find(findPlace);
+
+    var dist = getDistanceFromLatLonInKm(origPlace.lat, origPlace.lng, thisinstaplace.lat, thisinstaplace.lng)*/
+    console.log("construct feature");
+
+    /*function likes() {
+       if (place.top_posts.nodes[0].likes != 0) {
+        return place.top_posts.nodes[0].likes
+    } else {
+        return 0;
+    } */
 
 
-function promisifiedGetMediaByLocationId(locationId) {
+    var geoFeature = {
+        "id": place.id,
+        "type": "Feature",
+        "geometry": {
+            "type": "Point",
+            "coordinates": [place.lng, place.lat] //long-lat
+        },
+        "properties": {
+            "name": place.name,
+            //"category": matchingFB.category_list,
+            "count": place.media.count, // number of instagrams
+            //"mostlikes": likes(), // the photo at place with most likes
+            //"dist": dist
+        }
+    };
+
+    return geoFeature;
+
+}
+
+// -------- HELPER PROMISES ------ //
+
+function newWaypoints(startData, endData) {
+    var newPoints = [
+        startData.coords,
+        {
+            latitude: startData.stats.mostPopular.lat,
+            longitude: startData.stats.mostPopular.lng
+        },
+        {
+            latitude: startData.stats.leastPopular.lat,
+            longitude: startData.stats.leastPopular.lng
+        },
+        {
+            latitude: startData.stats.mostLiked.lat,
+            longitude: startData.stats.mostLiked.lng
+        },
+        {
+            latitude: endData.stats.mostPopular.lat,
+            longitude: endData.stats.mostPopular.lng
+        },
+        {
+            latitude: endData.stats.leastPopular.lat,
+            longitude: endData.stats.leastPopular.lng
+        },
+        {
+            latitude: endData.stats.mostLiked.lat,
+            longitude: endData.stats.mostLiked.lng
+        },
+        endData.coords,
+    ];
+
+    return newPoints;
+}
+
+
+function getInstagramData(places, point) {
+
+    return new Promise(function(resolve, reject) {
+        console.log("----- get instagram data for " + point);
+
+        var instagramPlaces = [];
+        var promiseArray = [];
+
+        for (var n = 0; n < places.length; n++) {
+            var thisLocID = parseInt(places[n].id);
+            // some how i'll also want to save the category list from the facebook data
+            var thisCategoryList = places[n].category_list;
+
+            // only look up places that are not cities or neighborhoods
+            if ((thisCategoryList[0].name != 'City') && (thisCategoryList[0].name != 'Neighborhood')) {
+
+                console.log("look up " + places[n].name);
+
+                var promise = lookupInstagramStats(thisLocID)
+                    .then(function(response_json) {
+                        instagramPlaces.push(response_json)
+                    })
+                    .catch(function(error) {
+                        console.log("error");
+                        reject(error)
+                    })
+                promiseArray.push(promise);
+            }
+            /*else {
+                console.log("ignore " + places[n].name + ", " + thisCategoryList[0].name);
+            }*/
+        }
+
+        // once each place has been instagram scrapped... 
+        Promise.all(promiseArray).then(function() {
+            console.log("instagram returned for " + point);
+            resolve(instagramPlaces);
+        })
+    })
+}
+
+
+function getRoute(places) { // takes an array of objects, each with lat
+    console.log("----- get route");
+
+
+
+    // directions API can return promises
+    // https://www.mapbox.com/help/getting-started-directions-api/
+    return new Promise(function(resolve, reject) {
+        mapboxClient.getDirections(places, {
+                geometries: 'geojson',
+                profile: 'walking',
+                alternatives: false,
+            },
+            function(error, response_json) {
+                if (error) {
+                    reject(error)
+                    console.log(error);
+                    return
+                }
+                resolve(response_json)
+            })
+    })
+}
+
+function findNearby(point, dist) {
+    console.log("----- find nearby places for " + point);
+
+    var url = "search?type=place&center=" + point + "&distance=" + dist + "&fields=name,id,location,category_list";
+
+    return new Promise(function(resolve, reject) {
+        graph.get(url, function(error, response_json) {
+            if (error) {
+                reject(error)
+                console.log(error);
+                return
+            } else {
+                console.log("success, received nearby places for " + point);
+                // .data is just the place data for the first 25 places
+                var nearbyPlaces = response_json.data;
+
+                // but we need to deal with pagination
+                // .paging.next will provide the URL for the next 25 results
+                // because we should also exclude 'neighborhoods' maybe - and just restrict to specific locations
+                // but for now, just use the first 25...
+
+                // pass this to get instagram stats
+                if (nearbyPlaces.length > 0) {
+                    resolve(nearbyPlaces);
+                } else {
+                    console.log("no nearby places - expand radius");
+                }
+            }
+        })
+    })
+}
+
+function lookupInstagramStats(locationId) {
     return new Promise(function(resolve, reject) {
         scraper.getMediaByLocationId(locationId, function(error, response_json) {
             if (error) {
@@ -290,6 +382,17 @@ function promisifiedGetMediaByLocationId(locationId) {
             resolve(response_json)
         })
     })
+}
+
+function latLongObj(string) {
+    var values = string.split(',');
+
+    var obj = {
+        latitude: parseFloat(values[0]),
+        longitude: parseFloat(values[1])
+    }
+
+    return obj
 }
 
 // if i want to do distances...
@@ -310,6 +413,39 @@ function deg2rad(deg) {
     return deg * (Math.PI / 180)
 }
 
+
+function keyStats(data, string) {
+    console.log("--- stats for " + string)
+
+    var pop = popularity(data);
+
+    var keyStats = {
+        mostPopular: pop.most,
+        leastPopular: pop.least,
+        mostLiked: mostLiked(data)
+    }
+    return keyStats
+}
+
+function popularity(data) {
+    var sorted = data.sort(function(a, b) {
+        return b.media.count - a.media.count
+    });
+
+    console.log("most popular: " + sorted[0].name + ", " + sorted[0].media.count);
+    console.log("least popular: " + sorted[sorted.length - 1].name + ", " + sorted[sorted.length - 1].media.count);
+
+    var popularity = {
+        most: sorted[0],
+        least: sorted[sorted.length - 1]
+    }
+    return popularity;
+}
+
+function mostLiked(data) {
+    console.log("most likes: " + data[0].name + ", " + data[0].top_posts.nodes[0].likes.count);
+    return data[0];
+}
 
 
 // ----------- AUTHORIZE FACEBOOK GRAPH API ----------------- //

@@ -21,20 +21,26 @@
         $("#placesForm").submit(function(e) {
             e.preventDefault();
             $.ajax({
-                url: "http://localhost:3000/setplaces",
+                url: "http://localhost:3000/getplaces",
                 type: 'POST',
                 data: $('#placesForm').serialize(),
                 dataType: 'json',
                 success: function(data) {
+                    console.log("let's plot!");
                     console.log(data);
-                    //$('body').html(data);
-                    //displayPlaces(data);
-                    /*map.addSource('nearbypoints', { type: 'geojson', data: data });
+
+                    var origroute = data.origroute.routes[0].geometry;
+                    var newroute = data.newroute.routes[0].geometry;
+                    var waypoints = data.waypoints;
+                    var start = data.start;
+                    var end = data.end;
+
+                    map.addSource('waypoints', { type: 'geojson', data: waypoints });
 
                     map.addLayer({
                         "id": "nearby",
                         "type": "circle",
-                        "source": "nearbypoints",
+                        "source": "waypoints",
                         "paint": {
                             "circle-radius": {
                                 property: 'count',
@@ -47,7 +53,81 @@
                             "circle-color": "#ff2244",
                             "circle-opacity": 0.6
                         }
-                    });*/
+                    });
+
+                    // original route
+                    map.addLayer({
+                        id: 'origroute',
+                        type: 'line',
+                        source: {
+                            type: 'geojson',
+                            data: {
+                                type: 'Feature',
+                                geometry: origroute
+                            }
+                        },
+                        paint: {
+                            'line-width': 2
+                        }
+                    });
+
+                    // new route
+                    map.addLayer({
+                        id: 'newroute',
+                        type: 'line',
+                        source: {
+                            type: 'geojson',
+                            data: {
+                                type: 'Feature',
+                                geometry: newroute
+                            }
+                        },
+                        paint: {
+                            'line-width': 2
+                        }
+                    });
+
+                    // start and end points
+                    map.addLayer({
+                        id: 'start',
+                        type: 'circle',
+                        source: {
+                            type: 'geojson',
+                            data: {
+                                type: 'Feature',
+                                geometry: {
+                                    type: 'Point',
+                                    coordinates: start
+                                }
+                            }
+                        },
+                        paint: {
+                            "circle-radius": 12,
+                            "circle-color": "#22dc6a"
+                        }
+                    });
+                    map.addLayer({
+                        id: 'end',
+                        type: 'circle',
+                        source: {
+                            type: 'geojson',
+                            data: {
+                                type: 'Feature',
+                                geometry: {
+                                    type: 'Point',
+                                    coordinates: end
+                                }
+                            }
+                        },
+                        paint: {
+                            "circle-radius": 12,
+                            "circle-color": "#22dc6a"
+                        }
+                    });
+
+
+                    //displayPlaces(data);
+                    
 
                 },
                 error: function() {
