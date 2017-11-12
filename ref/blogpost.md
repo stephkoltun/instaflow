@@ -17,7 +17,9 @@ The idea I developed furthest in terms of technical implementation combined Inst
 ###Method
 The service uses a number of different APIs to gather and process data. 
 1. Facebook Graph API
-When the user inputs two locations, this is processed through Facebook's Graph API to find nearby places as well as to get a "Facebook ID" for the particular locations. The method returns a paginated collection of any places within a particular distance (in meters) from the originating place. In testing, I often found that specifying anything below 900m returned no results. Below is a sample output of the JSON response.
+When the user inputs two locations, this is processed through Facebook's Graph API to find nearby places as well as to get a "Facebook ID" for the particular locations. The method returns a paginated collection of any places within a particular distance (in meters) from the supplied location. 
+Strangely, when testing, I often found that specifying anything below 900m returned no results. Below is a sample output of the JSON response.
+
 {
     "name": "New York City Halloween Parade",
     "id": "142696759079705",
@@ -41,11 +43,22 @@ When the user inputs two locations, this is processed through Facebook's Graph A
         "name": "Community Organization"
     }]
 }
-Why Facebook Graph? 
+Why Facebook Graph? I also looked at Foursquare's API which has a similar endpoint for nearby places. Since the Instagram scraper module required a Facebook-specific ID, as a first draft it's been easier to use the Facebook API. However, I'm interesting in seeing how different the results are between the two services.
 
 In 2016, Instagram locked down much of their API capabilities and minimized what type of applications could access the endpoints. Fortunately, someone wrote a node module for scraping the public content and included a method searching based on Facebook's location ID of the place.
 
 2. Insta-scraper
+For the two collections of nearby places, I used the insta-scraper module to pull the most recent and most-liked photos for each location. It returns an extensions JSON object included links to the media file, ....
 
+For the time-being, I focused on the number of posts associated with a particular place (the "count" property) and the number of likes for the top post. An aspect I've only started experimenting with is which of these places I choose to display and use as the waypoints. As a first test, out of each "nearby" collection, I used the place with the most photos as well as the place with the most likes. I also included the place with the least photos, to provide an "undiscovered" or "up-and-coming" destination. Often the place with the most number of photos is the same place as the photo with the most likes. If this was the case, I selected the place with the 
 
-In further development, I'd like to incorporate more branch of points along the original route. Rather than source additional destinations based on their proximity to the start and end, if an originating route is longer than a certain distance, intermediate points could be determined to find other locations.
+For further exploration of what places to select as waypoints, I'd like to dig into the tags as well as finding similarities across nearby places. One thing the Facebook Graph API provides is categories associated with each place. Does the user calibrate the waypoints they get back? Potential modes could include:
+- FOMO: shows all the most popular, current places regardless of distance
+- Before-It's-Cool: the places that have had the most rise in activity lately but aren't the top destination yet
+
+3. Mapbox Display
+purposefully ambiguous, maybe just labeled with the tags?
+
+In further development, I'd like to incorporate more instances of finding "nearby"/additional destinations along the original route. Rather than source additional destinations based on their proximity to the start and end, if an originating route is longer than a certain distance, intermediate points could be determined to find other locations. Or, is it a chain reaction: from start to 1 nearby, then use that nearby as the input to find a new way point, and so on and son on.
+
+I'd like to track this overtime. As I was working on it, the top places would change.
