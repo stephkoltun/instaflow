@@ -166,19 +166,40 @@ function constructGeoDataSet(start, end, origroute, newroute, newdests, res) {
         "type": "FeatureCollection",
         "features": []
     }
-
     for (var i = 0; i < newdests.length; i++) {
         var thispoint = newdests[i];
         var feature = constructFeature(thispoint);
         waypoints.features.push(feature);
     }
 
+    var startPlaces = {
+        "type": "FeatureCollection",
+        "features": []
+    }
+    for (var s = 0; s < start.instaplaces.length; s++) {
+        var thispoint = start.instaplaces[s];
+        var feature = constructFeature(thispoint);
+        startPlaces.features.push(feature);
+    }
+
+    var endPlaces = {
+        "type": "FeatureCollection",
+        "features": []
+    }
+    for (var e = 0; e < end.instaplaces.length; e++) {
+        var thispoint = end.instaplaces[e];
+        var feature = constructFeature(thispoint);
+        endPlaces.features.push(feature);
+    }
+
+
+
 
     var dataToSend = {
         newroute: newroute,
         origroute: origroute,
-        startPlaces: null,
-        endPlaces: null,
+        startPlaces: startPlaces,
+        endPlaces: endPlaces,
         waypoints: waypoints,
         start: start.coords,
         end: end.coords

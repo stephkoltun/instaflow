@@ -32,13 +32,17 @@
                     var origroute = data.origroute.routes[0].geometry;
                     var newroute = data.newroute.routes[0].geometry;
                     var waypoints = data.waypoints;
+                    var startpoints = data.startPlaces;
+                    var endpoints = data.endPlaces;
                     var start = data.start;
                     var end = data.end;
 
                     map.addSource('waypoints', { type: 'geojson', data: waypoints });
+                    map.addSource('startpoints', { type: 'geojson', data: startpoints });
+                    map.addSource('endpoints', { type: 'geojson', data: endpoints });
 
                     map.addLayer({
-                        "id": "nearby",
+                        "id": "waypoints",
                         "type": "circle",
                         "source": "waypoints",
                         "paint": {
@@ -54,6 +58,40 @@
                             "circle-opacity": 0.6
                         }
                     });
+                    map.addLayer({
+                        "id": "startpoints",
+                        "type": "circle",
+                        "source": "startpoints",
+                        "paint": {
+                            "circle-radius": {
+                                property: 'count',
+                                type: 'exponential',
+                                stops: [
+                                    [1, 5],
+                                    [110000, 20]
+                                ]
+                            },
+                            "circle-color": "#ff2244",
+                            "circle-opacity": 0.3
+                        }
+                    });
+                    map.addLayer({
+                        "id": "endpoints",
+                        "type": "circle",
+                        "source": "endpoints",
+                        "paint": {
+                            "circle-radius": {
+                                property: 'count',
+                                type: 'exponential',
+                                stops: [
+                                    [1, 5],
+                                    [110000, 20]
+                                ]
+                            },
+                            "circle-color": "#ff2244",
+                            "circle-opacity": 0.3
+                        }
+                    });
 
                     // original route
                     map.addLayer({
@@ -67,7 +105,9 @@
                             }
                         },
                         paint: {
-                            'line-width': 2
+                            'line-width': 2,
+                            'line-color': "#0033cc",
+                            'line-opacity': 0.5
                         }
                     });
 
@@ -83,7 +123,9 @@
                             }
                         },
                         paint: {
-                            'line-width': 2
+                            'line-width': 2,
+                            'line-color': "#ff2244",
+                            'line-opacity': 0.5
                         }
                     });
 
@@ -97,13 +139,13 @@
                                 type: 'Feature',
                                 geometry: {
                                     type: 'Point',
-                                    coordinates: start
+                                    coordinates: [start.longitude,start.latitude]
                                 }
                             }
                         },
                         paint: {
-                            "circle-radius": 12,
-                            "circle-color": "#22dc6a"
+                            "circle-radius": 5,
+                            "circle-color": "#0033cc"
                         }
                     });
                     map.addLayer({
@@ -115,13 +157,13 @@
                                 type: 'Feature',
                                 geometry: {
                                     type: 'Point',
-                                    coordinates: end
+                                    coordinates: [end.longitude,end.latitude]
                                 }
                             }
                         },
                         paint: {
-                            "circle-radius": 12,
-                            "circle-color": "#22dc6a"
+                            "circle-radius": 5,
+                            "circle-color": "#0033cc"
                         }
                     });
 
