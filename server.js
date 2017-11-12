@@ -192,9 +192,6 @@ function constructGeoDataSet(start, end, origroute, newroute, newdests, res) {
         endPlaces.features.push(feature);
     }
 
-
-
-
     var dataToSend = {
         newroute: newroute,
         origroute: origroute,
@@ -208,7 +205,6 @@ function constructGeoDataSet(start, end, origroute, newroute, newdests, res) {
     console.log("send data");
     res.send(dataToSend);
 
-
     //     console.log("done featuring");
     //     var valid = (GJV.valid(dataCollection));
     //     if (valid) {
@@ -220,79 +216,9 @@ function constructGeoDataSet(start, end, origroute, newroute, newdests, res) {
 }
 
 
-function constructFeature(place) {
-    /*function findPlace(thisplace) {
-        return thisplace.name === thisname;
-    }
-    // find the corresponding fbplace
-    var matchingFB = fbplaces.find(findPlace);
-
-    var dist = getDistanceFromLatLonInKm(origPlace.lat, origPlace.lng, thisinstaplace.lat, thisinstaplace.lng)*/
-    console.log("construct feature");
-
-    /*function likes() {
-       if (place.top_posts.nodes[0].likes != 0) {
-        return place.top_posts.nodes[0].likes
-    } else {
-        return 0;
-    } */
 
 
-    var geoFeature = {
-        "id": place.id,
-        "type": "Feature",
-        "geometry": {
-            "type": "Point",
-            "coordinates": [place.lng, place.lat] //long-lat
-        },
-        "properties": {
-            "name": place.name,
-            //"category": matchingFB.category_list,
-            "count": place.media.count, // number of instagrams
-            //"mostlikes": likes(), // the photo at place with most likes
-            //"dist": dist
-        }
-    };
-
-    return geoFeature;
-
-}
-
-// -------- HELPER PROMISES ------ //
-
-function newWaypoints(startData, endData) {
-    var newPoints = [
-        startData.coords,
-        {
-            latitude: startData.stats.mostPopular.lat,
-            longitude: startData.stats.mostPopular.lng
-        },
-        {
-            latitude: startData.stats.leastPopular.lat,
-            longitude: startData.stats.leastPopular.lng
-        },
-        {
-            latitude: startData.stats.mostLiked.lat,
-            longitude: startData.stats.mostLiked.lng
-        },
-        {
-            latitude: endData.stats.mostPopular.lat,
-            longitude: endData.stats.mostPopular.lng
-        },
-        {
-            latitude: endData.stats.leastPopular.lat,
-            longitude: endData.stats.leastPopular.lng
-        },
-        {
-            latitude: endData.stats.mostLiked.lat,
-            longitude: endData.stats.mostLiked.lng
-        },
-        endData.coords,
-    ];
-
-    return newPoints;
-}
-
+// -------- PROMISE FUNCTIONS ------ //
 
 function getInstagramData(places, point) {
 
@@ -338,8 +264,6 @@ function getInstagramData(places, point) {
 
 function getRoute(places) { // takes an array of objects, each with lat
     console.log("----- get route");
-
-
 
     // directions API can return promises
     // https://www.mapbox.com/help/getting-started-directions-api/
@@ -403,6 +327,80 @@ function lookupInstagramStats(locationId) {
             resolve(response_json)
         })
     })
+}
+
+// -------- HELPER FUNCTIONS ------ //
+
+function constructFeature(place) {
+    /*function findPlace(thisplace) {
+        return thisplace.name === thisname;
+    }
+    // find the corresponding fbplace
+    var matchingFB = fbplaces.find(findPlace);
+
+    var dist = getDistanceFromLatLonInKm(origPlace.lat, origPlace.lng, thisinstaplace.lat, thisinstaplace.lng)*/
+    console.log("construct feature");
+
+    /*function likes() {
+       if (place.top_posts.nodes[0].likes != 0) {
+        return place.top_posts.nodes[0].likes
+    } else {
+        return 0;
+    } */
+
+
+    var geoFeature = {
+        "id": place.id,
+        "type": "Feature",
+        "geometry": {
+            "type": "Point",
+            "coordinates": [place.lng, place.lat] //long-lat
+        },
+        "properties": {
+            "name": place.name,
+            //"category": matchingFB.category_list,
+            "count": place.media.count, // number of instagrams
+            //"mostlikes": likes(), // the photo at place with most likes
+            //"dist": dist
+        }
+    };
+
+    return geoFeature;
+
+}
+
+
+function newWaypoints(startData, endData) {
+    var newPoints = [
+        startData.coords,
+        {
+            latitude: startData.stats.mostPopular.lat,
+            longitude: startData.stats.mostPopular.lng
+        },
+        {
+            latitude: startData.stats.leastPopular.lat,
+            longitude: startData.stats.leastPopular.lng
+        },
+        {
+            latitude: startData.stats.mostLiked.lat,
+            longitude: startData.stats.mostLiked.lng
+        },
+        {
+            latitude: endData.stats.mostPopular.lat,
+            longitude: endData.stats.mostPopular.lng
+        },
+        {
+            latitude: endData.stats.leastPopular.lat,
+            longitude: endData.stats.leastPopular.lng
+        },
+        {
+            latitude: endData.stats.mostLiked.lat,
+            longitude: endData.stats.mostLiked.lng
+        },
+        endData.coords,
+    ];
+
+    return newPoints;
 }
 
 function latLongObj(string) {

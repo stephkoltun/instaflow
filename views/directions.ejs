@@ -42,6 +42,44 @@
                     map.addSource('endpoints', { type: 'geojson', data: endpoints });
 
                     map.addLayer({
+                        "id": "startpoints",
+                        "type": "circle",
+                        "source": "startpoints",
+                        "paint": {
+                            "circle-radius": {
+                                property: 'count',
+                                type: 'exponential',
+                                stops: [
+                                    [1, 5],
+                                    [110000, 20]
+                                ]
+                            },
+                            "circle-color": "rgba(0, 0, 0, 0)",
+                            "circle-stroke-width": 1,
+                            "circle-stroke-color": "#ff2244",
+                            "circle-opacity": 0.8
+                        }
+                    });
+                    map.addLayer({
+                        "id": "endpoints",
+                        "type": "circle",
+                        "source": "endpoints",
+                        "paint": {
+                            "circle-radius": {
+                                property: 'count',
+                                type: 'exponential',
+                                stops: [
+                                    [1, 5],
+                                    [110000, 20]
+                                ]
+                            },
+                            "circle-color": "rgba(0, 0, 0, 0)",
+                            "circle-stroke-width": 1,
+                            "circle-stroke-color": "#ff2244",
+                            "circle-opacity": 0.8
+                        }
+                    });
+                    map.addLayer({
                         "id": "waypoints",
                         "type": "circle",
                         "source": "waypoints",
@@ -58,40 +96,7 @@
                             "circle-opacity": 0.6
                         }
                     });
-                    map.addLayer({
-                        "id": "startpoints",
-                        "type": "circle",
-                        "source": "startpoints",
-                        "paint": {
-                            "circle-radius": {
-                                property: 'count',
-                                type: 'exponential',
-                                stops: [
-                                    [1, 5],
-                                    [110000, 20]
-                                ]
-                            },
-                            "circle-color": "#ff2244",
-                            "circle-opacity": 0.3
-                        }
-                    });
-                    map.addLayer({
-                        "id": "endpoints",
-                        "type": "circle",
-                        "source": "endpoints",
-                        "paint": {
-                            "circle-radius": {
-                                property: 'count',
-                                type: 'exponential',
-                                stops: [
-                                    [1, 5],
-                                    [110000, 20]
-                                ]
-                            },
-                            "circle-color": "#ff2244",
-                            "circle-opacity": 0.3
-                        }
-                    });
+                    
 
                     // original route
                     map.addLayer({
@@ -195,7 +200,7 @@
 
         var map = new mapboxgl.Map({
             container: 'map',
-            style: 'mapbox://styles/mapbox/streets-v9?optimize=true',
+            style: 'mapbox://styles/stephkoltun/cj9x3w68h6cfn2sp79qivfl6m?optimize=true',
             center: [-73.9958957, 40.7294285],
             // make it the start point of the map - needs to be long-lat (not lat-long)
             zoom: 14 // how close
