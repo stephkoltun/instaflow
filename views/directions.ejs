@@ -21,20 +21,68 @@
         $("#placesForm").submit(function(e) {
             e.preventDefault();
             $.ajax({
-                url: "http://localhost:3000/setplaces",
+                url: "http://localhost:3000/getplaces",
                 type: 'POST',
                 data: $('#placesForm').serialize(),
                 dataType: 'json',
                 success: function(data) {
+                    console.log("let's plot!");
                     console.log(data);
-                    //$('body').html(data);
-                    //displayPlaces(data);
-                    map.addSource('nearbypoints', { type: 'geojson', data: data });
+
+                    var origroute = data.origroute.routes[0].geometry;
+                    var newroute = data.newroute.routes[0].geometry;
+                    var waypoints = data.waypoints;
+                    var startpoints = data.startPlaces;
+                    var endpoints = data.endPlaces;
+                    var start = data.start;
+                    var end = data.end;
+
+                    map.addSource('waypoints', { type: 'geojson', data: waypoints });
+                    map.addSource('startpoints', { type: 'geojson', data: startpoints });
+                    map.addSource('endpoints', { type: 'geojson', data: endpoints });
 
                     map.addLayer({
-                        "id": "nearby",
+                        "id": "startpoints",
                         "type": "circle",
-                        "source": "nearbypoints",
+                        "source": "startpoints",
+                        "paint": {
+                            "circle-radius": {
+                                property: 'count',
+                                type: 'exponential',
+                                stops: [
+                                    [1, 5],
+                                    [110000, 20]
+                                ]
+                            },
+                            "circle-color": "rgba(0, 0, 0, 0)",
+                            "circle-stroke-width": 1,
+                            "circle-stroke-color": "#ff2244",
+                            "circle-opacity": 0.8
+                        }
+                    });
+                    map.addLayer({
+                        "id": "endpoints",
+                        "type": "circle",
+                        "source": "endpoints",
+                        "paint": {
+                            "circle-radius": {
+                                property: 'count',
+                                type: 'exponential',
+                                stops: [
+                                    [1, 5],
+                                    [110000, 20]
+                                ]
+                            },
+                            "circle-color": "rgba(0, 0, 0, 0)",
+                            "circle-stroke-width": 1,
+                            "circle-stroke-color": "#ff2244",
+                            "circle-opacity": 0.8
+                        }
+                    });
+                    map.addLayer({
+                        "id": "waypoints",
+                        "type": "circle",
+                        "source": "waypoints",
                         "paint": {
                             "circle-radius": {
                                 property: 'count',
@@ -48,6 +96,85 @@
                             "circle-opacity": 0.6
                         }
                     });
+                    
+
+                    // original route
+                    map.addLayer({
+                        id: 'origroute',
+                        type: 'line',
+                        source: {
+                            type: 'geojson',
+                            data: {
+                                type: 'Feature',
+                                geometry: origroute
+                            }
+                        },
+                        paint: {
+                            'line-width': 2,
+                            'line-color': "#0033cc",
+                            'line-opacity': 0.5
+                        }
+                    });
+
+                    // new route
+                    map.addLayer({
+                        id: 'newroute',
+                        type: 'line',
+                        source: {
+                            type: 'geojson',
+                            data: {
+                                type: 'Feature',
+                                geometry: newroute
+                            }
+                        },
+                        paint: {
+                            'line-width': 2,
+                            'line-color': "#ff2244",
+                            'line-opacity': 0.5
+                        }
+                    });
+
+                    // start and end points
+                    map.addLayer({
+                        id: 'start',
+                        type: 'circle',
+                        source: {
+                            type: 'geojson',
+                            data: {
+                                type: 'Feature',
+                                geometry: {
+                                    type: 'Point',
+                                    coordinates: [start.longitude,start.latitude]
+                                }
+                            }
+                        },
+                        paint: {
+                            "circle-radius": 5,
+                            "circle-color": "#0033cc"
+                        }
+                    });
+                    map.addLayer({
+                        id: 'end',
+                        type: 'circle',
+                        source: {
+                            type: 'geojson',
+                            data: {
+                                type: 'Feature',
+                                geometry: {
+                                    type: 'Point',
+                                    coordinates: [end.longitude,end.latitude]
+                                }
+                            }
+                        },
+                        paint: {
+                            "circle-radius": 5,
+                            "circle-color": "#0033cc"
+                        }
+                    });
+
+
+                    //displayPlaces(data);
+                    
 
                 },
                 error: function() {
@@ -73,7 +200,7 @@
 
         var map = new mapboxgl.Map({
             container: 'map',
-            style: 'mapbox://styles/mapbox/streets-v9?optimize=true',
+            style: 'mapbox://styles/stephkoltun/cj9x3w68h6cfn2sp79qivfl6m?optimize=true',
             center: [-73.9958957, 40.7294285],
             // make it the start point of the map - needs to be long-lat (not lat-long)
             zoom: 14 // how close
